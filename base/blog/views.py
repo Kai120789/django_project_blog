@@ -4,6 +4,7 @@ from django.core.paginator import Paginator, EmptyPage, \
                                   PageNotAnInteger
 from django.views.generic import ListView
 from .forms import EmailPostForm
+from django.core.mail import send_mail
 
 def post_list(request):
     post_list = Post.published.all()
@@ -54,14 +55,31 @@ def post_share(request, post_id):
     post = get_object_or_404(Post,
                              id=post_id,
                              status=Post.Status.PUBLISHED)
-    if request.method=='POST':
+    sent = False
+    if request.method == 'POST':
         # Форма была передана на обработку
         form = EmailPostForm(request.POST)
         if form.is_valid():
             # Поля формы успешно прошли валидацию
             cd = form.cleaned_data
-            # ... отправить электронное письмо
-        else:
-            form = EmailPostForm()
-        return render(request, 'blog/post/share.html', {'post': post,
-                                                        'form': form})
+            post_url = request.build_absolute_uri(
+                post.get_absolute_url())
+            subject = f"{cd['name']} recommends you read " \
+                      f"{post.title}"
+            message = f"Read {post.title} at {post_url}\n\n" \
+                      f"{cd['name']}\'s comments: {cd['comments']}"
+            try:
+                send_mail(subject, message, 'kinglaval96@mail.ru',
+                          [cd['to']])
+                sent = True
+                return render(request, 'blog/post/share.html', {'post': post,
+                                                               'form': form,
+                                                               'sent': sent})
+            except Exception as e:
+                form.add_error(None, "Ошибка отправки email. Попробуйте позже.")
+                print(f"Ошибка отправки email: {e}")
+    else:
+        form = EmailPostForm()
+    return render(request, 'blog/post/share.html', {'post': post,
+                                                    'form': form,
+                                                    'sent': False})
